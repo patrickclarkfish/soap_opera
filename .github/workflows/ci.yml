@@ -62,20 +62,7 @@ jobs:
       - name: Install test dependencies
         run: pip install -r requirements_test.txt
       - name: pytest
-        # No tests exist yet (integration skeleton lands in a follow-up PR).
-        # pytest exits 5 ("no tests collected") on an empty suite; treat that
-        # as success so this job is meaningful once tests land, without
-        # failing CI in the meantime.
-        run: |
-          set +e
-          pytest
-          status=$?
-          set -e
-          if [ "$status" -eq 5 ]; then
-            echo "::notice::No tests collected yet; treating empty suite as success."
-            exit 0
-          fi
-          exit "$status"
+        run: pytest
 
   hassfest:
     name: hassfest

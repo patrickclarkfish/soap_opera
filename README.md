@@ -1,9 +1,23 @@
 # SOAP Opera — Pet Medication & Clinical Record Tracking
 
-> **Status: pre-alpha. No functional code exists yet.** This repository
-> currently holds a design document in the form of a README. Nothing here is
-> installable. Watch or star if you want to follow progress; there is nothing
-> to try yet.
+## Pre-alpha — no stability guarantees
+
+This project is in active early development and is not ready for use with data
+you care about.
+
+- **The database schema is unstable.** Migrations between pre-1.0 versions are
+  not guaranteed. A release may require deleting your database and starting over.
+- **Breaking changes land without notice or deprecation periods**, including to
+  entity IDs, service signatures, and configuration.
+- **Do not make this your only record.** Keep whatever you use today until 1.0.
+
+Installing at this stage means accepting all of the above.
+
+## Disclaimer
+
+SOAP Opera is a reminder and record-keeping aid. It is not a medical device, not
+a dosing authority, and must not be relied upon for clinical decisions. Always
+follow your veterinarian's instructions.
 
 SOAP Opera is a planned Home Assistant custom integration for pet medication
 administration and clinical record tracking. The name is a pun on SOAP notes
@@ -71,14 +85,13 @@ reason it exists as a separate integration rather than a fork or a PR:
   is yours. An export service is planned as a first-class, early feature so
   the record is never trapped in the integration's database.
 
-## Disclaimer
+## Requirements
 
-SOAP Opera is a reminder and record-keeping aid. It is **not** a medical
-device and **not** a dosing authority. It does not check drug interactions,
-validate doses, or make clinical judgments. It must not be relied on for
-clinical decisions. If you are a veterinarian or veterinary professional
-looking at this project: treat any data it produces as an owner-maintained
-log, not as a verified clinical source.
+Home Assistant **2025.3.0** or later. That's the release that added the
+config subentry APIs (`ConfigSubentry`, `async_get_supported_subentry_types`);
+this integration is designed around one config entry per animal with regimens
+as subentries of it, so the minimum version is pinned to when that API
+actually landed rather than guessed.
 
 ## License
 
