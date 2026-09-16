@@ -1,2 +1,1 @@
-pytest==9.1.1
 pytest-homeassistant-custom-component==0.13.365
