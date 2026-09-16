@@ -1,0 +1,136 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+      - name: Install ruff
+        run: pip install ruff==0.16.7
+      - name: ruff check
+        run: ruff check .
+      - name: ruff format --check
+        run: ruff format --check .
+
+  typecheck:
+    name: Typecheck (mypy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+      - name: Install mypy
+        run: pip install mypy==2.3.1
+      - name: mypy
+        run: mypy custom_components/
+
+  test:
+    name: Test (pytest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: requirements_test.txt
+      - name: Install test dependencies
+        run: pip install -r requirements_test.txt
+      - name: pytest
+        # No tests exist yet (integration skeleton lands in a follow-up PR).
+        # pytest exits 5 ("no tests collected") on an empty suite; treat that
+        # as success so this job is meaningful once tests land, without
+        # failing CI in the meantime.
+        run: |
+          set +e
+          pytest
+          status=$?
+          set -e
+          if [ "$status" -eq 5 ]; then
+            echo "::notice::No tests collected yet; treating empty suite as success."
+            exit 0
+          fi
+          exit "$status"
+
+  hassfest:
+    name: hassfest
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # home-assistant/actions publishes no version tags; pinned to the
+      # master HEAD commit as of 2026-09-10 ("Require string versions in
+      # the info helper (#148)").
+      - uses: home-assistant/actions/hassfest@58bff37c8947f690ace498be413a9b78d6f30f93
+        # master @ 2026-09-10
+
+  hacs:
+    name: HACS validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: hacs/action@d556e736723344f83838d08488c983a15381059a # 22.5.0
+        with:
+          category: integration
+          # This repo is not yet listed in home-assistant/brands. That check
+          # cannot pass until the integration is submitted there post-1.0,
+          # and would otherwise block every run. Remove this ignore once the
+          # brands PR is merged.
+          ignore: brands
+
+  ci-ok:
+    name: ci-ok
+    needs: [lint, typecheck, test, hassfest, hacs]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Fail if any required job did not succeed
+        if: |
+          needs.lint.result != 'success' ||
+          needs.typecheck.result != 'success' ||
+          needs.test.result != 'success' ||
+          needs.hassfest.result != 'success' ||
+          needs.hacs.result != 'success'
+        run: |
+          echo "One or more required jobs did not succeed:"
+          echo "  lint:      ${{ needs.lint.result }}"
+          echo "  typecheck: ${{ needs.typecheck.result }}"
+          echo "  test:      ${{ needs.test.result }}"
+          echo "  hassfest:  ${{ needs.hassfest.result }}"
+          echo "  hacs:      ${{ needs.hacs.result }}"
+          exit 1
+      - name: All required jobs succeeded
+        run: echo "ci-ok"
