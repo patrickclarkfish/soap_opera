@@ -1,0 +1,1 @@
+"""The SOAP Opera integration."""

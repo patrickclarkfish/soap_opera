@@ -1,0 +1,47 @@
+name: Scheduled validation
+
+# HACS's own validation rules change over time (new required manifest keys,
+# new brand/image checks, etc.), so this repo can start failing validation
+# without anything in this repo changing. Better to learn that from a
+# scheduled run than from a release attempt. This workflow is NOT a required
+# status check for merges - see ci.yml for that.
+
+on:
+  schedule:
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  hassfest:
+    name: hassfest
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # home-assistant/actions publishes no version tags; pinned to the
+      # master HEAD commit as of 2026-09-10 ("Require string versions in
+      # the info helper (#148)").
+      - uses: home-assistant/actions/hassfest@58bff37c8947f690ace498be413a9b78d6f30f93
+        # master @ 2026-09-10
+
+  hacs:
+    name: HACS validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: hacs/action@d556e736723344f83838d08488c983a15381059a # 22.5.0
+        with:
+          category: integration
+          # This repo is not yet listed in home-assistant/brands. That check
+          # cannot pass until the integration is submitted there post-1.0,
+          # and would otherwise block every run. Remove this ignore once the
+          # brands PR is merged.
+          ignore: brands
+          comment: false
