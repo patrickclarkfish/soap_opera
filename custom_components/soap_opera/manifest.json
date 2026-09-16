@@ -4,8 +4,8 @@
   "codeowners": ["@patrickclarkfish"],
   "config_flow": true,
   "documentation": "https://github.com/patrickclarkfish/soap_opera",
-  "issue_tracker": "https://github.com/patrickclarkfish/soap_opera/issues",
   "iot_class": "local_push",
+  "issue_tracker": "https://github.com/patrickclarkfish/soap_opera/issues",
   "requirements": [],
   "version": "0.1.0"
 }
