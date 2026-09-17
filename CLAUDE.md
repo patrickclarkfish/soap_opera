@@ -33,3 +33,11 @@ flow, or integration setup/teardown.
 - **The external Postgres target is a rebuildable mirror, never a second
   primary.** On outage: mark it stale, stop writing to it, rebuild it on
   reconnect. Never queue writes for it.
+
+- **Every domain record's primary key is a UUIDv7** (`sa.Uuid()`, Python-side
+  default `uuid.uuid7`), not an autoincrement integer. Time-ordered, so
+  SQLite inserts still append instead of fragmenting the B-tree the way
+  random UUIDv4 would. It also means an id assigned in SQLite is the same id
+  the Postgres mirror uses — no remapping table needed when the mirror is
+  rebuilt. Internal bookkeeping tables that aren't domain records (e.g.
+  `schema_version`) are exempt and stay plain autoincrement integers.
