@@ -41,3 +41,28 @@ flow, or integration setup/teardown.
   the Postgres mirror uses — no remapping table needed when the mirror is
   rebuilt. Internal bookkeeping tables that aren't domain records (e.g.
   `schema_version`) are exempt and stay plain autoincrement integers.
+
+- **The database is authoritative; a config entry's data is just how it got
+  collected.** `async_setup_entry` upserts the corresponding database row
+  every time it runs (keyed on `entry_id`, so an edit updates rather than
+  duplicates), and an update listener reloads the entry on any edit so that
+  sync actually happens on a rename, not just at next restart. Any future
+  entity should read from the database, not from `entry.data`.
+
+- **A migration module's own Table objects are frozen snapshots, not the
+  current shape.** Never import one migration's Table definition into
+  another migration, and never let runtime code (queries, upserts) reuse a
+  migration's Table object. `storage/database.py` keeps its own copy of each
+  domain table representing the current cumulative shape; update it by hand
+  in the same change that adds a migration altering that table.
+  `schema_version` (in `storage/tables.py`) is the sole exception, shared
+  between the runner and migration 001, because it is locked in shape
+  forever and no migration will ever alter it.
+
+- **SQLite connections get `_configure_sqlite_engine` before first use**
+  (foreign_keys=ON, WAL, a busy_timeout, and real transactional DDL via the
+  isolation_level=None + explicit `BEGIN IMMEDIATE` recipe — pysqlite
+  otherwise autocommits DDL before SQLAlchemy's transaction even starts, and
+  a plain `BEGIN` can deadlock a concurrent SELECT-then-write against a
+  BEGIN IMMEDIATE writer). Any new engine construction must call it before
+  the first connection is used.
