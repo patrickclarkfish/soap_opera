@@ -1,5 +1,9 @@
 # SOAP Opera — Pet Medication & Clinical Record Tracking
 
+[![CI](https://github.com/patrickclarkfish/soap_opera/actions/workflows/ci.yml/badge.svg)](https://github.com/patrickclarkfish/soap_opera/actions/workflows/ci.yml)
+[![Scheduled validation](https://github.com/patrickclarkfish/soap_opera/actions/workflows/scheduled-validate.yml/badge.svg)](https://github.com/patrickclarkfish/soap_opera/actions/workflows/scheduled-validate.yml)
+[![codecov](https://codecov.io/gh/patrickclarkfish/soap_opera/graph/badge.svg)](https://codecov.io/gh/patrickclarkfish/soap_opera)
+
 ## Pre-alpha — no stability guarantees
 
 This project is in active early development and is not ready for use with data
