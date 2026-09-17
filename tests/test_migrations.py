@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 import sqlalchemy as sa
 from custom_components.soap_opera.storage import database
-from custom_components.soap_opera.storage.migrations import SCHEMA_VERSION
+from custom_components.soap_opera.storage.migrations import MIGRATIONS, SCHEMA_VERSION
 
 
 def _engine() -> sa.engine.Engine:
@@ -59,3 +59,55 @@ def test_downgrade_guard_raises_when_db_is_newer_than_code() -> None:
 
     with pytest.raises(database.SchemaTooNewError):
         database.run_migrations(engine)
+
+
+def test_recovers_when_crash_leaves_ddl_applied_but_no_version_row() -> None:
+    """A crash between a migration's DDL and its version-row commit must be
+    resumable: the next run should recognize the DDL already happened and
+    just catch the version row up, not blow up or double-apply.
+    """
+    engine = _engine()
+
+    # Simulate the crash: migration 1's DDL ran, but the process died before
+    # the version row was ever written.
+    with engine.connect() as conn:
+        MIGRATIONS[1](conn)
+    assert database._get_current_version(engine) == 0
+
+    result = database.run_migrations(engine)
+
+    assert result == SCHEMA_VERSION
+    assert database._get_current_version(engine) == SCHEMA_VERSION
+    inspector = sa.inspect(engine)
+    assert "subjects" in inspector.get_table_names()
+
+
+def test_migration_ddl_does_not_survive_a_rolled_back_transaction() -> None:
+    """The real bug behind the scenario above: pysqlite autocommits DDL
+    before it even reaches the transaction, so `with engine.begin(): ...`
+    around a migration is not actually atomic for CREATE TABLE. This test
+    isolates that directly -- unlike the recovery test above, it cannot be
+    masked by metadata.create_all()'s checkfirst=True, because it never
+    re-runs the DDL; it only checks whether a rollback undid it.
+
+    Before the fix: fails (the tables exist despite the rollback).
+    After the fix: passes.
+    """
+
+    class SimulatedCrash(Exception):
+        pass
+
+    engine = _engine()
+    # Normally applied by run_migrations() itself; done explicitly here since
+    # this test calls a migration directly to isolate the DDL/transaction
+    # interaction from run_migrations' own recovery logic.
+    database._configure_sqlite_engine(engine)
+
+    with pytest.raises(SimulatedCrash), engine.begin() as conn:
+        MIGRATIONS[1](conn)
+        raise SimulatedCrash("crash after DDL, before the version row commits")
+
+    inspector = sa.inspect(engine)
+    tables = inspector.get_table_names()
+    assert "subjects" not in tables
+    assert "schema_version" not in tables

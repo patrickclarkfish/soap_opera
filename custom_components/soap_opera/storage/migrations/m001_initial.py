@@ -15,21 +15,15 @@ import uuid
 import sqlalchemy as sa
 from sqlalchemy.engine import Connection
 
+from ..tables import schema_version_table
+
 
 def apply(conn: Connection) -> None:
+    # Shared with database.py -- see tables.py for why this one table is
+    # safe to share instead of each owning its own frozen snapshot.
+    schema_version_table.create(conn, checkfirst=True)
+
     metadata = sa.MetaData()
-
-    sa.Table(
-        "schema_version",
-        metadata,
-        # Internal migration bookkeeping, not a domain record -- stays a
-        # plain autoincrement counter rather than following the UUID
-        # convention below.
-        sa.Column("change_id", sa.Integer, primary_key=True, autoincrement=True),
-        sa.Column("version", sa.Integer, nullable=False),
-        sa.Column("applied_at", sa.Text, nullable=False),
-    )
-
     sa.Table(
         "subjects",
         metadata,
@@ -47,5 +41,4 @@ def apply(conn: Connection) -> None:
         sa.Column("date_of_birth", sa.Text, nullable=True),
         sa.Column("created_at", sa.Text, nullable=False),
     )
-
     metadata.create_all(conn)
