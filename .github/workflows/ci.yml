@@ -7,9 +7,15 @@ on:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Cancelling an in-progress push run on main would cancel the record of
+  # whether that commit's CI actually passed; only superseded PR runs should
+  # be cancelled.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions: {}
+
+env:
+  PYTHON_VERSION: "3.14"
 
 jobs:
   lint:
@@ -22,7 +28,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: "3.14"
+          python-version: ${{ env.PYTHON_VERSION }}
       - name: Install ruff
         run: pip install ruff==0.16.7
       - name: ruff check
@@ -40,7 +46,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: "3.14"
+          python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
           cache-dependency-path: requirements_test.txt
       - name: Install dependencies
@@ -65,7 +71,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: "3.14"
+          python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
           cache-dependency-path: requirements_test.txt
       - name: Install test dependencies
@@ -103,7 +109,6 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
-      pull-requests: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: hacs/action@d556e736723344f83838d08488c983a15381059a # 22.5.0
@@ -114,6 +119,9 @@ jobs:
           # and would otherwise block every run. Remove this ignore once the
           # brands PR is merged.
           ignore: brands
+          # No pull-requests: write granted above, so this would just fail
+          # quietly anyway; disabled explicitly rather than left implicit.
+          comment: false
 
   ci-ok:
     name: ci-ok
