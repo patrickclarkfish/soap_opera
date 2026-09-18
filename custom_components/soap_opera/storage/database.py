@@ -249,6 +249,13 @@ class Database:
 
         current = _get_current_version(engine)
         if _should_back_up_before_migrating(current, SCHEMA_VERSION):
+            # WAL mode (enabled above) can leave recently-committed data
+            # sitting in the -wal sidecar file rather than in the main file.
+            # Checkpoint it into the main file first so a plain copy of that
+            # one file is a complete, self-consistent snapshot -- otherwise
+            # the backup can silently miss recent writes.
+            with engine.connect() as conn:
+                conn.exec_driver_sql("PRAGMA wal_checkpoint(TRUNCATE)")
             backup_path = f"{db_path}.backup"
             shutil.copy2(db_path, backup_path)
             _LOGGER.info(

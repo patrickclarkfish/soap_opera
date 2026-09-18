@@ -82,6 +82,26 @@ def test_recovers_when_crash_leaves_ddl_applied_but_no_version_row() -> None:
     assert "subjects" in inspector.get_table_names()
 
 
+def test_subjects_table_matches_what_migration_001_actually_creates() -> None:
+    """database.py deliberately keeps its own copy of the `subjects` shape
+    rather than sharing migration 001's (see tables.py and database.py for
+    why -- unlike schema_version, this table can be altered by a later
+    migration, and sharing one object would break the incremental-migration
+    model the moment that happens). Nothing enforces the two copies match
+    except a code comment; this test is that enforcement.
+    """
+    engine = _engine()
+    database.run_migrations(engine)
+
+    inspector = sa.inspect(engine)
+    reflected = {col["name"]: col for col in inspector.get_columns("subjects")}
+    declared = {col.name: col for col in database.subjects_table.columns}
+
+    assert set(reflected) == set(declared)
+    for name, declared_col in declared.items():
+        assert reflected[name]["nullable"] == declared_col.nullable, name
+
+
 def test_migration_ddl_does_not_survive_a_rolled_back_transaction() -> None:
     """The real bug behind the scenario above: pysqlite autocommits DDL
     before it even reaches the transaction, so `with engine.begin(): ...`
