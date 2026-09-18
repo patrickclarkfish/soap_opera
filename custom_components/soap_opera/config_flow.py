@@ -44,7 +44,9 @@ class SoapOperaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 entry.data[CONF_NAME].casefold()
                 for entry in self._async_current_entries()
             }
-            if name.casefold() in existing_names:
+            if not name:
+                errors["base"] = "name_required"
+            elif name.casefold() in existing_names:
                 errors["base"] = "name_exists"
             else:
                 return self.async_create_entry(title=name, data=user_input)

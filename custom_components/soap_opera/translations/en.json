@@ -14,7 +14,8 @@
       }
     },
     "error": {
-      "name_exists": "An animal with this name is already configured."
+      "name_exists": "An animal with this name is already configured.",
+      "name_required": "Name cannot be empty."
     }
   }
 }

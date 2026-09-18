@@ -60,3 +60,17 @@ async def test_duplicate_name_is_rejected(hass: HomeAssistant) -> None:
     assert result["type"] is FlowResultType.FORM
     assert result["errors"] == {"base": "name_exists"}
     assert len(hass.config_entries.async_entries(DOMAIN)) == 1
+
+
+async def test_whitespace_only_name_is_rejected(hass: HomeAssistant) -> None:
+    """A name that strips down to empty must not create a nameless entry."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"name": "   ", "species": "Dog"}
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": "name_required"}
+    assert len(hass.config_entries.async_entries(DOMAIN)) == 0
