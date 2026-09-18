@@ -1,0 +1,21 @@
+{
+  "title": "SOAP Opera",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Add an animal",
+        "description": "Each SOAP Opera entry tracks one animal. Add another entry to track a second animal.",
+        "data": {
+          "name": "Name",
+          "species": "Species",
+          "breed": "Breed (optional)",
+          "date_of_birth": "Date of birth (optional)"
+        }
+      }
+    },
+    "error": {
+      "name_exists": "An animal with this name is already configured.",
+      "name_required": "Name cannot be empty."
+    }
+  }
+}

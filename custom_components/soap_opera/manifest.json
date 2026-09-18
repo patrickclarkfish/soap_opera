@@ -1,10 +1,11 @@
 {
   "domain": "soap_opera",
-  "name": "SOAP Opera",
+  "name": "SOAP Opera — Pet Medication & Clinical Record Tracking",
   "codeowners": ["@patrickclarkfish"],
-  "config_flow": false,
+  "config_flow": true,
   "documentation": "https://github.com/patrickclarkfish/soap_opera",
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/patrickclarkfish/soap_opera/issues",
+  "requirements": [],
   "version": "0.1.0"
 }

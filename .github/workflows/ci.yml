@@ -7,9 +7,15 @@ on:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Cancelling an in-progress push run on main would cancel the record of
+  # whether that commit's CI actually passed; only superseded PR runs should
+  # be cancelled.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions: {}
+
+env:
+  PYTHON_VERSION: "3.14"
 
 jobs:
   lint:
@@ -22,7 +28,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: "3.14"
+          python-version: ${{ env.PYTHON_VERSION }}
       - name: Install ruff
         run: pip install ruff==0.16.7
       - name: ruff check
@@ -40,9 +46,18 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: "3.14"
-      - name: Install mypy
-        run: pip install mypy==2.3.1
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements_test.txt
+      - name: Install dependencies
+        # mypy needs the real homeassistant package installed (not just
+        # stubbed via ignore_missing_imports) to see the actual signature of
+        # HA base classes like ConfigFlow.__init_subclass__ -- without it,
+        # our config_flow's `domain=DOMAIN` class keyword argument reads as
+        # unexpected against plain object.__init_subclass__.
+        run: |
+          pip install mypy==2.3.1
+          pip install -r requirements_test.txt
       - name: mypy
         run: mypy custom_components/
 
@@ -56,26 +71,23 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: "3.14"
+          python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
           cache-dependency-path: requirements_test.txt
       - name: Install test dependencies
         run: pip install -r requirements_test.txt
       - name: pytest
-        # No tests exist yet (integration skeleton lands in a follow-up PR).
-        # pytest exits 5 ("no tests collected") on an empty suite; treat that
-        # as success so this job is meaningful once tests land, without
-        # failing CI in the meantime.
-        run: |
-          set +e
-          pytest
-          status=$?
-          set -e
-          if [ "$status" -eq 5 ]; then
-            echo "::notice::No tests collected yet; treating empty suite as success."
-            exit 0
-          fi
-          exit "$status"
+        run: pytest --cov=custom_components --cov-report=xml --cov-report=term-missing
+      - name: Upload coverage to Codecov
+        # Informational only: a Codecov outage or a missing/misconfigured
+        # CODECOV_TOKEN should not block merges on its own, so this step
+        # never fails the job.
+        continue-on-error: true
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage.xml
+          fail_ci_if_error: false
 
   hassfest:
     name: hassfest
@@ -97,7 +109,6 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
-      pull-requests: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: hacs/action@d556e736723344f83838d08488c983a15381059a # 22.5.0
@@ -108,6 +119,9 @@ jobs:
           # and would otherwise block every run. Remove this ignore once the
           # brands PR is merged.
           ignore: brands
+          # No pull-requests: write granted above, so this would just fail
+          # quietly anyway; disabled explicitly rather than left implicit.
+          comment: false
 
   ci-ok:
     name: ci-ok
