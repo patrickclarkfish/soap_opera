@@ -59,3 +59,10 @@ ENV/
 
 # macOS
 .DS_Store
+
+# SOAP Opera's own runtime artifacts (only ever created outside the repo,
+# in the HA config dir, but ignored here too in case a local test run
+# leaves one behind in the working tree)
+*.db
+*.db-journal
+*.jsonl
