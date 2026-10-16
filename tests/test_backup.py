@@ -1,10 +1,9 @@
 """Tests for Database.connect_and_migrate's pre-migration backup and its
 cleanup on failure.
 
-These patch in a synthetic migration 2 so the 0 < current < target branch is
-actually reachable -- with only migration 001 shipped, no real install can
-hit it yet, and the first time one does is the first time a real database is
-at stake.
+These build a real version-1 database and then patch in a synthetic
+migration 2, so the upgrade can be made to fail on demand. One test at the
+end runs the real chain instead.
 """
 
 from __future__ import annotations
@@ -20,7 +19,7 @@ import pytest
 import sqlalchemy as sa
 from custom_components.soap_opera.storage import database
 from custom_components.soap_opera.storage.database import DB_FILENAME, Database
-from custom_components.soap_opera.storage.migrations import MIGRATIONS
+from custom_components.soap_opera.storage.migrations import MIGRATIONS, SCHEMA_VERSION
 from sqlalchemy.engine import Connection
 
 
@@ -30,7 +29,7 @@ def _fake_hass(config_dir: Path) -> Any:
     )
 
 
-def _create_v1_database(db_path: Path) -> None:
+def _create_v1_database(db_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A real, already-migrated version-1 database with one subject in it.
 
     The subject is written through a WAL-mode engine that is left *open*
@@ -39,7 +38,10 @@ def _create_v1_database(db_path: Path) -> None:
     miss it.
     """
     engine = sa.create_engine(f"sqlite:///{db_path}", future=True)
-    database.run_migrations(engine)
+    with monkeypatch.context() as m:
+        m.setattr(database, "MIGRATIONS", {1: MIGRATIONS[1]})
+        m.setattr(database, "SCHEMA_VERSION", 1)
+        database.run_migrations(engine)
     database.upsert_subject(
         engine,
         config_entry_id="entry-1",
@@ -64,7 +66,9 @@ def _dispose_open_engines() -> Any:
 def _install_migration_2(
     monkeypatch: pytest.MonkeyPatch, apply: Callable[[Connection], None]
 ) -> None:
-    monkeypatch.setattr(database, "MIGRATIONS", {**MIGRATIONS, 2: apply})
+    """Stand in a synthetic migration 2, so the v1 -> v2 upgrade can be made
+    to fail on demand. Real migrations past 1 are left out entirely."""
+    monkeypatch.setattr(database, "MIGRATIONS", {1: MIGRATIONS[1], 2: apply})
     monkeypatch.setattr(database, "SCHEMA_VERSION", 2)
 
 
@@ -81,7 +85,7 @@ def test_backup_filename_carries_the_source_version(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     db_path = tmp_path / DB_FILENAME
-    _create_v1_database(db_path)
+    _create_v1_database(db_path, monkeypatch)
     _install_migration_2(monkeypatch, _create_probe_table)
 
     db = Database(_fake_hass(tmp_path))
@@ -96,7 +100,7 @@ def test_backup_is_a_readable_consistent_pre_migration_database(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     db_path = tmp_path / DB_FILENAME
-    _create_v1_database(db_path)
+    _create_v1_database(db_path, monkeypatch)
     _install_migration_2(monkeypatch, _create_probe_table)
 
     db = Database(_fake_hass(tmp_path))
@@ -122,7 +126,7 @@ def test_existing_backup_for_the_same_version_is_preserved(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
     db_path = tmp_path / DB_FILENAME
-    _create_v1_database(db_path)
+    _create_v1_database(db_path, monkeypatch)
     _install_migration_2(monkeypatch, _create_probe_table)
     backup = tmp_path / f"{DB_FILENAME}.v1.backup"
     backup.write_bytes(b"backup from an earlier attempt")
@@ -149,7 +153,7 @@ def test_retry_after_failed_migration_keeps_the_original_backup(
     only good pre-migration copy.
     """
     db_path = tmp_path / DB_FILENAME
-    _create_v1_database(db_path)
+    _create_v1_database(db_path, monkeypatch)
 
     def failing_migration(conn: Connection) -> None:
         raise RuntimeError("migration 2 blew up")
@@ -200,3 +204,21 @@ def test_engine_is_disposed_when_migration_fails(
     created[0].dispose.assert_called_once()  # type: ignore[attr-defined]
     with pytest.raises(RuntimeError, match="not been set up"):
         _ = db.engine
+
+
+def test_real_upgrade_from_v1_backs_up_then_migrates(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db_path = tmp_path / DB_FILENAME
+    _create_v1_database(db_path, monkeypatch)
+
+    db = Database(_fake_hass(tmp_path))
+    db.connect_and_migrate()
+    db.close()
+
+    assert _subject_names(tmp_path / f"{DB_FILENAME}.v1.backup") == ["Biscuit"]
+    assert _subject_names(db_path) == ["Biscuit"]
+    with sqlite3.connect(db_path) as conn:
+        assert conn.execute("SELECT max(version) FROM schema_version").fetchone() == (
+            SCHEMA_VERSION,
+        )

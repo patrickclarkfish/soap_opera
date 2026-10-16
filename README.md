@@ -89,6 +89,24 @@ reason it exists as a separate integration rather than a fork or a PR:
   is yours. An export service is planned as a first-class, early feature so
   the record is never trapped in the integration's database.
 
+## Roadmap
+
+- **Phase 0 — done.** Integration skeleton, one config entry per animal,
+  shared SQLite database and migration runner, audit log.
+- **Phase 1 — in progress.** The data model and the dose-logging funnel.
+  - [x] Pre-migration backup and audit log durability fixes.
+  - [x] Medications and versioned, effective-dated regimens (migration 002).
+  - [ ] Regimens as config subentries of an animal.
+  - [ ] The `log_dose` service: one funnel for every capture path, with
+        database-enforced idempotency and warn-and-record guardrails, plus a
+        log-dose button and an administration event entity per regimen.
+  - [ ] The `export` service: every table to CSV or JSON.
+- **Phase 2.** Scheduling (due / overdue / missed), NFC tags together with
+  the explicit quantity prompt, and care episodes.
+- **Later.** Notes and observations, inventory, actionable notifications,
+  the Lovelace card, the optional Postgres mirror, capture telemetry
+  retention.
+
 ## Requirements
 
 Home Assistant **2025.3.0** or later. That's the release that added the
