@@ -98,3 +98,29 @@ flow, or integration setup/teardown.
   (`regimens.DOSING_FIELDS` / `NON_DOSING_FIELDS`). A dosing edit supersedes
   at an effective date; a non-dosing edit corrects the current row in place.
   A new regimen column must be added to exactly one of them.
+
+- **Every dose goes through one funnel.** `dosing.async_log_dose` (HA side)
+  and `storage/administrations.log_dose` (storage side) are the only path
+  that writes an administration. Services, buttons, and later NFC and
+  notifications are thin callers; guardrails, attribution, idempotency,
+  the audit log write and the `soap_opera_dose_logged` event live there
+  once.
+
+- **Idempotency is enforced by the database, not by application logic.**
+  `capture_event.idempotency_key` is UNIQUE; the funnel inserts it in a
+  savepoint and treats `IntegrityError` as "already recorded". Never add a
+  select-then-insert check in front of it: two concurrent calls would both
+  pass. The bucket width is `const.IDEMPOTENCY_BUCKET_SECONDS`.
+
+- **Guardrails warn and record; they never block.** A dose that was given
+  is always recorded. Each guardrail returns an outcome; tripped ones are
+  stored on the administration (`guardrail_flags`) with whether the caller
+  overrode them. Overrides are clinical data, not a bypass.
+
+- **`given_late` and `missed` are computed by the system, never set by a
+  caller.** The service schema excludes them and `log_dose` refuses them
+  unless called with `system=True`, which only the scheduler (phase 2) may
+  do.
+
+- **`capture_event` is telemetry, not the record.** Like the JSONL log it is
+  bounded (retention arrives later). `administration` is the record.

@@ -1,0 +1,42 @@
+log_dose:
+  fields:
+    regimen:
+      required: true
+      example: "button.biscuit_gabapentin_100_mg_capsule_log_dose"
+      selector:
+        text:
+    dose_units:
+      selector:
+        number:
+          min: 0
+          step: any
+          mode: box
+    status:
+      default: given
+      selector:
+        select:
+          translation_key: caller_status
+          options:
+            - given
+            - refused
+            - vomited_within_30min
+            - held_per_vet
+            - skipped_other
+    administered_at:
+      selector:
+        datetime:
+    administered_by:
+      selector:
+        text:
+    note:
+      selector:
+        text:
+          multiline: true
+    idempotency_key:
+      advanced: true
+      selector:
+        text:
+    override_guardrails:
+      default: false
+      selector:
+        boolean:
