@@ -184,6 +184,39 @@ def test_cannot_supersede_an_ended_regimen(conn: Connection, ids) -> None:
         regimens.supersede_regimen(conn, first, effective=JAN_15, dose_units=3)
 
 
+def test_supersede_partway_through_a_course_keeps_the_course_end(
+    conn: Connection, ids
+) -> None:
+    course = _regimen(conn, ids, JAN_1, FEB_1, dose_units=1)
+
+    new = regimens.supersede_regimen(conn, course, effective=JAN_15, dose_units=2)
+
+    old_row = regimens.get_regimen(conn, course)
+    new_row = regimens.get_regimen(conn, new)
+    assert old_row is not None and old_row.end_date == JAN_15
+    assert new_row is not None and new_row.end_date == FEB_1
+    assert _in_force(conn, ids, JAN_20) == new
+    assert _in_force(conn, ids, FEB_1) is None
+
+
+def test_supersede_can_reopen_or_move_the_end(conn: Connection, ids) -> None:
+    course = _regimen(conn, ids, JAN_1, FEB_1)
+
+    new = regimens.supersede_regimen(
+        conn, course, effective=JAN_15, end_date=None, dose_units=2
+    )
+
+    new_row = regimens.get_regimen(conn, new)
+    assert new_row is not None and new_row.end_date is None
+
+
+def test_cannot_supersede_on_or_after_the_course_end(conn: Connection, ids) -> None:
+    course = _regimen(conn, ids, JAN_1, JAN_20)
+
+    with pytest.raises(RegimenNotSupersedableError):
+        regimens.supersede_regimen(conn, course, effective=JAN_20, dose_units=2)
+
+
 def test_cannot_supersede_before_the_current_regimen_starts(
     conn: Connection, ids
 ) -> None:

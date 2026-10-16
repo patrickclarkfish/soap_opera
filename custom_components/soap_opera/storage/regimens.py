@@ -87,6 +87,14 @@ _REGIMEN_DEFAULTS: dict[str, Any] = {
 }
 
 
+class _Inherit:
+    """Sentinel type: supersede_regimen's end_date defaults to the current
+    row's, and None already means "open-ended"."""
+
+
+INHERIT = _Inherit()
+
+
 def _now() -> str:
     return datetime.now(UTC).isoformat()
 
@@ -239,17 +247,19 @@ def supersede_regimen(
     current_id: uuid.UUID,
     *,
     effective: date,
-    end_date: date | None = None,
+    end_date: date | None | _Inherit = INHERIT,
     **changes: Any,
 ) -> uuid.UUID:
     """End-date the current regimen at `effective` and insert its successor.
 
     The successor copies every field of the current row, then applies
     `changes` (REGIMEN_FIELDS only). It is in force from `effective` until
-    `end_date` (default: open-ended). Returns the new row's id.
+    `end_date`, which by default is the current row's own end_date: a dose
+    change partway through a fixed course keeps the course end. Returns the
+    new row's id.
 
-    Only the head of a chain -- a row with no end_date -- can be superseded,
-    and not with an effective date before it starts. An effective date equal
+    The effective date must fall within the current row's range: not before
+    it starts, and before it ends if it has an end. An effective date equal
     to its start_date is allowed: the current row is left with an empty
     range, i.e. it never came into force, which is the honest record of a
     prescription changed before its first day.
@@ -258,9 +268,10 @@ def supersede_regimen(
     current = get_regimen(conn, current_id)
     if current is None:
         raise LookupError(f"no regimen {current_id}")
-    if current.end_date is not None:
+    if current.end_date is not None and effective >= current.end_date:
         raise RegimenNotSupersedableError(
-            f"regimen {current_id} already ended on {current.end_date}"
+            f"regimen {current_id} has ended by {effective} "
+            f"(end date {current.end_date})"
         )
     if effective < current.start_date:
         raise RegimenNotSupersedableError(
@@ -280,7 +291,7 @@ def supersede_regimen(
         medication_id=current.medication_id,
         config_subentry_id=current.config_subentry_id,
         start_date=effective,
-        end_date=end_date,
+        end_date=current.end_date if isinstance(end_date, _Inherit) else end_date,
         supersedes_id=current_id,
         **{**carried, **changes},
     )
