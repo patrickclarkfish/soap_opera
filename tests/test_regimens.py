@@ -405,3 +405,117 @@ def test_concurrent_overlapping_inserts_admit_exactly_one(tmp_path: Path) -> Non
     engine.dispose()
 
     assert sorted(outcomes) == ["inserted", "rejected"]
+
+
+# --- sync from config, and the dosing / non-dosing split --------------------
+
+
+def test_dosing_and_non_dosing_fields_partition_the_regimen_fields() -> None:
+    assert regimens.DOSING_FIELDS | regimens.NON_DOSING_FIELDS == (
+        regimens.REGIMEN_FIELDS
+    )
+    assert not regimens.DOSING_FIELDS & regimens.NON_DOSING_FIELDS
+
+
+def test_in_place_update_refuses_dosing_fields(conn: Connection, ids) -> None:
+    regimen_id = _regimen(conn, ids, JAN_1)
+
+    with pytest.raises(ValueError, match="superseding"):
+        regimens.update_regimen_in_place(conn, regimen_id, dose_units=2)
+
+
+def test_extending_an_end_date_into_another_regimen_is_refused(
+    conn: Connection, ids
+) -> None:
+    course = _regimen(conn, ids, JAN_1, JAN_10)
+    _regimen(conn, ids, JAN_15)
+
+    regimens.set_regimen_end_date(conn, course, JAN_15)  # adjacent: fine
+    with pytest.raises(RegimenOverlapError):
+        regimens.set_regimen_end_date(conn, course, JAN_20)
+
+
+def _spec(
+    medication_id: uuid.UUID, effective: date = JAN_1, **fields: object
+) -> regimens.RegimenSpec:
+    base: dict[str, object] = dict.fromkeys(regimens.REGIMEN_FIELDS) | {
+        "dose_units": 1,
+        "unit_strength": 100,
+        "prn": False,
+        "dose_variable": False,
+    }
+    return regimens.RegimenSpec(
+        fields={**base, **fields},
+        start_date=JAN_1,
+        end_date=None,
+        effective_date=effective,
+        medication_id=medication_id,
+    )
+
+
+def test_sync_regimen_is_idempotent(conn: Connection, ids) -> None:
+    spec = _spec(ids[1])
+    first = regimens.sync_regimen(
+        conn, subject_id=ids[0], config_subentry_id="s1", spec=spec
+    )
+    second = regimens.sync_regimen(
+        conn, subject_id=ids[0], config_subentry_id="s1", spec=spec
+    )
+
+    assert first == second
+    assert (
+        conn.execute(
+            sa.select(sa.func.count()).select_from(database.regimen_table)
+        ).scalar_one()
+        == 1
+    )
+
+
+def test_sync_regimen_supersedes_on_dosing_and_corrects_otherwise(
+    conn: Connection, ids
+) -> None:
+    head = regimens.sync_regimen(
+        conn, subject_id=ids[0], config_subentry_id="s1", spec=_spec(ids[1])
+    )
+
+    same_head = regimens.sync_regimen(
+        conn,
+        subject_id=ids[0],
+        config_subentry_id="s1",
+        spec=_spec(ids[1], indication="pain"),
+    )
+    assert same_head == head
+
+    new_head = regimens.sync_regimen(
+        conn,
+        subject_id=ids[0],
+        config_subentry_id="s1",
+        spec=_spec(ids[1], indication="pain", dose_units=2, effective=JAN_15),
+    )
+    assert new_head != head
+    row = regimens.get_regimen(conn, new_head)
+    assert row is not None
+    assert row.supersedes_id == head and row.start_date == JAN_15
+
+
+def test_removed_subentries_are_end_dated(conn: Connection, ids) -> None:
+    kept = regimens.sync_regimen(
+        conn, subject_id=ids[0], config_subentry_id="kept", spec=_spec(ids[1])
+    )
+    other_medication = _gabapentin(conn)
+    removed = regimens.sync_regimen(
+        conn,
+        subject_id=ids[0],
+        config_subentry_id="removed",
+        spec=_spec(other_medication),
+    )
+
+    ended = regimens.end_regimens_for_removed_subentries(
+        conn, subject_id=ids[0], current_subentry_ids={"kept"}, today=JAN_15
+    )
+
+    assert ended == [removed]
+    removed_row = regimens.get_regimen(conn, removed)
+    kept_row = regimens.get_regimen(conn, kept)
+    assert removed_row is not None and removed_row.end_date == JAN_15
+    assert kept_row is not None and kept_row.end_date is None

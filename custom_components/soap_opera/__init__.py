@@ -17,8 +17,10 @@ from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryError
 from homeassistant.helpers import device_registry as dr
+from homeassistant.util import dt as dt_util
 
 from .const import CONF_BREED, CONF_DATE_OF_BIRTH, CONF_SPECIES, DOMAIN
+from .regimen_config import SUBENTRY_TYPE_REGIMEN, sync_entry_regimens
 from .storage.audit_log import AuditLog
 from .storage.database import AUDIT_LOG_FILENAME, Database, SchemaTooNewError
 
@@ -75,13 +77,30 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             # config-flow field, always present; breed and date of birth
             # are optional.
             species: str = entry.data[CONF_SPECIES]
-            await hass.async_add_executor_job(
+            subject_id = await hass.async_add_executor_job(
                 shared.database.upsert_subject,
                 entry.entry_id,
                 entry.title,
                 species,
                 entry.data.get(CONF_BREED),
                 entry.data.get(CONF_DATE_OF_BIRTH),
+            )
+
+            # Same principle for regimens: each subentry is synced into
+            # regimen rows on every setup, and the update listener below
+            # reloads on any subentry add / edit / remove. A subentry that
+            # can't be applied is logged and skipped rather than failing
+            # setup for the whole animal.
+            await hass.async_add_executor_job(
+                sync_entry_regimens,
+                shared.database.engine,
+                subject_id,
+                {
+                    subentry_id: subentry.data
+                    for subentry_id, subentry in entry.subentries.items()
+                    if subentry.subentry_type == SUBENTRY_TYPE_REGIMEN
+                },
+                dt_util.now().date(),
             )
 
             device_registry = dr.async_get(hass)

@@ -26,6 +26,7 @@ unit. All of them are blocking.
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from enum import StrEnum
 from typing import Any
@@ -72,6 +73,36 @@ REGIMEN_FIELDS = frozenset(
         "prescribing_vet",
     }
 )
+
+# Which edits are a new version of the prescription and which are a
+# correction to the record of it. A design decision, not an implementation
+# detail: changing a field in DOSING_FIELDS goes through supersede_regimen
+# (end-date and insert, with an effective date), so "before vs. after the
+# change" stays answerable. Changing a field in NON_DOSING_FIELDS updates
+# the current row in place.
+#
+# Dosing covers anything that changes what the animal is given, how much,
+# or when: the dose and strength, frequency and scheduled times (an evening
+# dose moved to the morning is a clinical change, not a typo), PRN versus
+# scheduled, the minimum interval, and the variable-dose bounds. Only who
+# prescribed it and why are non-dosing.
+DOSING_FIELDS = frozenset(
+    {
+        "dose_units",
+        "unit_strength",
+        "frequency",
+        "scheduled_times",
+        "prn",
+        "min_interval_seconds",
+        "dose_variable",
+        "dose_increment",
+        "dose_max_single",
+        "dose_max_daily",
+    }
+)
+NON_DOSING_FIELDS = frozenset({"indication", "prescribing_vet"})
+assert DOSING_FIELDS | NON_DOSING_FIELDS == REGIMEN_FIELDS
+assert not DOSING_FIELDS & NON_DOSING_FIELDS
 
 _REGIMEN_DEFAULTS: dict[str, Any] = {
     "frequency": None,
@@ -165,6 +196,8 @@ def _check_no_overlap(
     medication_id: uuid.UUID,
     start_date: date,
     end_date: date | None,
+    exclude_id: uuid.UUID | None = None,
+    exclude_config_subentry_id: str | None = None,
 ) -> None:
     if end_date is not None and end_date == start_date:
         return  # empty range: never in force, can't overlap anything
@@ -179,6 +212,15 @@ def _check_no_overlap(
     )
     if end_date is not None:
         query = query.where(r.start_date < end_date)
+    if exclude_id is not None:
+        query = query.where(r.id != exclude_id)
+    if exclude_config_subentry_id is not None:
+        query = query.where(
+            sa.or_(
+                r.config_subentry_id.is_(None),
+                r.config_subentry_id != exclude_config_subentry_id,
+            )
+        )
     clash = conn.execute(query.limit(1)).first()
     if clash is not None:
         raise RegimenOverlapError(
@@ -343,3 +385,200 @@ def regimen_in_force(
             f"medication {medication_id}"
         )
     return rows[0] if rows else None
+
+
+def update_regimen_in_place(
+    conn: Connection, regimen_id: uuid.UUID, **changes: Any
+) -> None:
+    """Correct NON_DOSING_FIELDS on one row. Refuses dosing fields: those
+    must go through supersede_regimen."""
+    dosing = set(changes) & DOSING_FIELDS
+    if dosing:
+        raise ValueError(
+            f"dosing fields {sorted(dosing)} must be changed by superseding"
+        )
+    _validate_regimen_fields(changes)
+    if changes:
+        conn.execute(
+            regimen_table.update()
+            .where(regimen_table.c.id == regimen_id)
+            .values(**changes)
+        )
+
+
+def set_regimen_end_date(
+    conn: Connection, regimen_id: uuid.UUID, end_date: date | None
+) -> None:
+    """Move (or remove) the planned end of a regimen, e.g. a course
+    extended by the vet. Unlike end_regimen this can extend, so it rechecks
+    for overlap against every other regimen of the same drug."""
+    current = get_regimen(conn, regimen_id)
+    if current is None:
+        raise LookupError(f"no regimen {regimen_id}")
+    if end_date is not None and end_date < current.start_date:
+        raise ValueError("end_date is before start_date")
+    _check_no_overlap(
+        conn,
+        subject_id=current.subject_id,
+        medication_id=current.medication_id,
+        start_date=current.start_date,
+        end_date=end_date,
+        exclude_id=regimen_id,
+    )
+    conn.execute(
+        regimen_table.update()
+        .where(regimen_table.c.id == regimen_id)
+        .values(end_date=end_date)
+    )
+
+
+def find_overlap(
+    conn: Connection,
+    *,
+    subject_id: uuid.UUID,
+    medication_id: uuid.UUID,
+    start_date: date,
+    end_date: date | None,
+    exclude_config_subentry_id: str | None = None,
+) -> bool:
+    """Read-only form of the overlap check, for validating input early.
+    Optionally ignores every row of one subentry's chain (the one being
+    edited)."""
+    try:
+        _check_no_overlap(
+            conn,
+            subject_id=subject_id,
+            medication_id=medication_id,
+            start_date=start_date,
+            end_date=end_date,
+            exclude_config_subentry_id=exclude_config_subentry_id,
+        )
+    except RegimenOverlapError:
+        return True
+    return False
+
+
+def chain_head(conn: Connection, config_subentry_id: str) -> Row[Any] | None:
+    """The newest version of the regimen collected through a subentry: the
+    row in its chain that nothing supersedes."""
+    r = regimen_table.c
+    successor = regimen_table.alias("successor")
+    return conn.execute(
+        sa.select(regimen_table)
+        .where(r.config_subentry_id == config_subentry_id)
+        .where(~sa.exists().where(successor.c.supersedes_id == r.id))
+    ).first()
+
+
+def list_medications(conn: Connection) -> list[Row[Any]]:
+    return list(
+        conn.execute(
+            sa.select(medication_table).order_by(
+                medication_table.c.generic_name, medication_table.c.strength
+            )
+        ).all()
+    )
+
+
+@dataclass(frozen=True)
+class RegimenSpec:
+    """What a regimen subentry says the regimen should be, already parsed.
+
+    Exactly one of medication_id (an existing medication) or new_medication
+    (insert_medication keyword arguments) is set. effective_date is when the
+    most recent dosing edit takes effect; start_date when the regimen first
+    did.
+    """
+
+    fields: dict[str, Any]
+    start_date: date
+    end_date: date | None
+    effective_date: date
+    medication_id: uuid.UUID | None = None
+    new_medication: dict[str, Any] | None = None
+
+
+def sync_regimen(
+    conn: Connection,
+    *,
+    subject_id: uuid.UUID,
+    config_subentry_id: str,
+    spec: RegimenSpec,
+) -> uuid.UUID:
+    """Bring the database in line with one regimen subentry. Returns the
+    id of the chain head afterwards.
+
+    - No rows yet: insert the medication if it is new, then the regimen.
+    - A dosing field differs from the head: supersede at
+      spec.effective_date.
+    - Otherwise: correct non-dosing fields and the end date in place.
+
+    The medication is fixed for the life of a subentry; switching drugs is
+    a new regimen, not a version of this one. Idempotent: a second call
+    with the same spec changes nothing.
+    """
+    head = chain_head(conn, config_subentry_id)
+    if head is None:
+        medication_id = spec.medication_id
+        if medication_id is None:
+            if spec.new_medication is None:
+                raise ValueError("spec names no medication")
+            medication_id = insert_medication(conn, **spec.new_medication)
+        return insert_regimen(
+            conn,
+            subject_id=subject_id,
+            medication_id=medication_id,
+            config_subentry_id=config_subentry_id,
+            start_date=spec.start_date,
+            end_date=spec.end_date,
+            **spec.fields,
+        )
+
+    dosing_changed = any(
+        getattr(head, name) != spec.fields[name]
+        for name in DOSING_FIELDS
+        if name in spec.fields
+    )
+    if dosing_changed:
+        return supersede_regimen(
+            conn,
+            head.id,
+            effective=spec.effective_date,
+            end_date=spec.end_date,
+            **spec.fields,
+        )
+
+    non_dosing = {
+        name: spec.fields[name]
+        for name in NON_DOSING_FIELDS
+        if name in spec.fields and getattr(head, name) != spec.fields[name]
+    }
+    update_regimen_in_place(conn, head.id, **non_dosing)
+    if head.end_date != spec.end_date:
+        set_regimen_end_date(conn, head.id, spec.end_date)
+    return head.id
+
+
+def end_regimens_for_removed_subentries(
+    conn: Connection,
+    *,
+    subject_id: uuid.UUID,
+    current_subentry_ids: set[str],
+    today: date,
+) -> list[uuid.UUID]:
+    """End-date (never delete) every still-running regimen of this subject
+    whose subentry no longer exists. Returns the ids it ended."""
+    r = regimen_table.c
+    rows = conn.execute(
+        sa.select(r.id, r.config_subentry_id).where(
+            r.subject_id == subject_id,
+            r.config_subentry_id.is_not(None),
+            sa.or_(r.end_date.is_(None), r.end_date > today),
+        )
+    ).all()
+    ended = []
+    for row in rows:
+        if row.config_subentry_id not in current_subentry_ids:
+            end_regimen(conn, row.id, today)
+            ended.append(row.id)
+    return ended

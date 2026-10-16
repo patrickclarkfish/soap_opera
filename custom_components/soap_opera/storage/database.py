@@ -287,8 +287,9 @@ def upsert_subject(
     species: str,
     breed: str | None,
     date_of_birth: str | None,
-) -> None:
-    """Create or update the subject row for a config entry. Blocking.
+) -> uuid.UUID:
+    """Create or update the subject row for a config entry and return its
+    id. Blocking.
 
     Keyed on config_entry_id so a renamed entry (or any edited field)
     updates the existing row instead of creating a duplicate.
@@ -301,8 +302,10 @@ def upsert_subject(
         ).first()
 
         if existing_id is None:
+            subject_id = uuid.uuid7()
             conn.execute(
                 subjects_table.insert().values(
+                    id=subject_id,
                     config_entry_id=config_entry_id,
                     name=name,
                     species=species,
@@ -312,6 +315,7 @@ def upsert_subject(
                 )
             )
         else:
+            subject_id = existing_id[0]
             conn.execute(
                 subjects_table.update()
                 .where(subjects_table.c.config_entry_id == config_entry_id)
@@ -322,6 +326,7 @@ def upsert_subject(
                     date_of_birth=date_of_birth,
                 )
             )
+    return subject_id
 
 
 class Database:
@@ -366,9 +371,9 @@ class Database:
         species: str,
         breed: str | None,
         date_of_birth: str | None,
-    ) -> None:
+    ) -> uuid.UUID:
         """Create or update the subject row for a config entry. Blocking."""
-        upsert_subject(
+        return upsert_subject(
             self.engine,
             config_entry_id=config_entry_id,
             name=name,

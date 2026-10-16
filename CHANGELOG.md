@@ -11,6 +11,11 @@ All notable changes to this project are documented here. Format follows
   (a dosing change end-dates the current row and inserts a successor) and
   effective-dated, with at most one in force per animal and medication.
   Schema and storage helpers only; nothing user-facing yet.
+- Regimens as config subentries of an animal. Pick an existing medication
+  or define one inline. Editing a dosing field records a new version from
+  an effective date (default today). Editing the indication or prescribing
+  vet corrects the current version. Removing a regimen end-dates it and
+  keeps its history.
 
 ### Fixed
 

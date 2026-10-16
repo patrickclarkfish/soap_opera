@@ -17,5 +17,115 @@
       "name_exists": "An animal with this name is already configured.",
       "name_required": "Name cannot be empty."
     }
+  },
+  "config_subentries": {
+    "regimen": {
+      "initiate_flow": {
+        "user": "Add regimen"
+      },
+      "entry_type": "Regimen",
+      "step": {
+        "user": {
+          "title": "Medication",
+          "description": "Choose the medication this regimen is for, or define a new one.",
+          "data": {
+            "medication": "Medication"
+          }
+        },
+        "medication": {
+          "title": "New medication",
+          "description": "Tablets, capsules and patches need a strength per unit. Liquids need a concentration per mL instead.",
+          "data": {
+            "generic_name": "Generic name",
+            "brand_name": "Brand name (optional)",
+            "form": "Form",
+            "strength": "Strength per unit",
+            "concentration": "Concentration per mL (liquids)",
+            "unit": "Unit (e.g. mg, mcg)",
+            "route": "Route",
+            "requires_refrigeration": "Requires refrigeration",
+            "shake_well": "Shake well",
+            "with_food": "With food"
+          }
+        },
+        "regimen": {
+          "title": "Regimen for {medication}",
+          "data": {
+            "dose_units": "Standard dose (tablets, capsules, mL, patches…)",
+            "unit_strength": "Strength per tablet / capsule / patch, or per mL for a liquid",
+            "frequency": "Frequency (e.g. twice daily)",
+            "scheduled_times": "Scheduled times (HH:MM)",
+            "prn": "As needed (PRN)",
+            "min_interval_hours": "Minimum hours between doses",
+            "dose_variable": "Variable dose",
+            "dose_increment": "Dose increment (in the same units as the standard dose)",
+            "dose_max_single": "Maximum single dose (in the medication's unit, e.g. mg)",
+            "dose_max_daily": "Maximum total per 24 hours (in the medication's unit)",
+            "indication": "Indication",
+            "prescribing_vet": "Prescribing veterinarian",
+            "end_date": "End date (optional, for a fixed course)",
+            "start_date": "Start date"
+          }
+        },
+        "reconfigure": {
+          "title": "Edit regimen for {medication}",
+          "description": "Changing the dose, strength, timing, interval, or variable-dose limits records a new version of this regimen. It starts on the effective date, and the current version (in force since {current_since}) ends that day. Changing only the indication, the prescribing vet, or the end date corrects the current version, and the effective date is ignored.",
+          "data": {
+            "dose_units": "Standard dose (tablets, capsules, mL, patches…)",
+            "unit_strength": "Strength per tablet / capsule / patch, or per mL for a liquid",
+            "frequency": "Frequency (e.g. twice daily)",
+            "scheduled_times": "Scheduled times (HH:MM)",
+            "prn": "As needed (PRN)",
+            "min_interval_hours": "Minimum hours between doses",
+            "dose_variable": "Variable dose",
+            "dose_increment": "Dose increment (in the same units as the standard dose)",
+            "dose_max_single": "Maximum single dose (in the medication's unit, e.g. mg)",
+            "dose_max_daily": "Maximum total per 24 hours (in the medication's unit)",
+            "indication": "Indication",
+            "prescribing_vet": "Prescribing veterinarian",
+            "end_date": "End date (optional, for a fixed course)",
+            "effective_date": "Effective date of a dosing change"
+          }
+        }
+      },
+      "error": {
+        "must_be_positive": "Must be greater than zero.",
+        "invalid_time": "Use 24-hour HH:MM times, e.g. 08:00.",
+        "increment_required": "A variable dose needs an increment.",
+        "end_before_start": "The end date must be after the start date.",
+        "effective_before_current": "A dosing change can't take effect before the current version started.",
+        "effective_after_end": "A dosing change must take effect before the regimen's end date.",
+        "overlap": "This animal already has a regimen for this medication during those dates.",
+        "required": "Required.",
+        "strength_required": "A tablet, capsule or patch needs a strength.",
+        "concentration_required": "A liquid needs a concentration."
+      },
+      "abort": {
+        "not_loaded": "This animal's entry must be loaded before regimens can be added.",
+        "reconfigure_successful": "Regimen updated."
+      }
+    }
+  },
+  "selector": {
+    "medication_form": {
+      "options": {
+        "tablet": "Tablet",
+        "capsule": "Capsule",
+        "liquid": "Liquid",
+        "transdermal": "Transdermal"
+      }
+    },
+    "with_food": {
+      "options": {
+        "required": "Give with food",
+        "avoid": "Give without food",
+        "no_preference": "No preference"
+      }
+    },
+    "medication_choice": {
+      "options": {
+        "new": "Define a new medication"
+      }
+    }
   }
 }
