@@ -72,3 +72,20 @@ flow, or integration setup/teardown.
   a plain `BEGIN` can deadlock a concurrent SELECT-then-write against a
   BEGIN IMMEDIATE writer). Any new engine construction must call it before
   the first connection is used.
+
+- **A dosing change never UPDATEs a regimen row.** It end-dates the current
+  row and INSERTs a successor whose `supersedes_id` points back at it
+  (`storage/regimens.py:supersede_regimen`). The chain is the dosing
+  history; overwriting a dose destroys the one question this project exists
+  to answer.
+
+- **Regimens are effective-dated; there is no `is_active` flag.** A regimen
+  is in force on date d when `start_date <= d AND (end_date IS NULL OR d <
+  end_date)`. A future-dated change is a row whose start hasn't arrived.
+  Resolve "current" with `regimen_in_force`, never by "latest row" or "no
+  end_date".
+
+- **At most one regimen in force per (subject, medication) on any date.**
+  SQLite can't constrain non-overlapping ranges, so `insert_regimen` checks
+  it inside the write transaction (safe because of `BEGIN IMMEDIATE`). Every
+  regimen insert goes through it.

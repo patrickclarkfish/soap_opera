@@ -49,6 +49,55 @@ subjects_table = sa.Table(
 )
 
 
+# Current cumulative shapes of `medication` and `regimen`, separate from
+# migration 002's frozen snapshot for the same reason as subjects_table.
+# Column meanings are documented in m002_medication_regimen.py.
+medication_table = sa.Table(
+    "medication",
+    sa.MetaData(),
+    sa.Column("id", sa.Uuid(), primary_key=True, default=uuid.uuid7),
+    sa.Column("generic_name", sa.Text, nullable=False),
+    sa.Column("brand_name", sa.Text, nullable=True),
+    sa.Column("strength", sa.Float, nullable=True),
+    sa.Column("unit", sa.Text, nullable=False),
+    sa.Column("form", sa.Text, nullable=False),
+    sa.Column("concentration", sa.Float, nullable=True),
+    sa.Column("route", sa.Text, nullable=False),
+    sa.Column("requires_refrigeration", sa.Boolean, nullable=False),
+    sa.Column("shake_well", sa.Boolean, nullable=False),
+    sa.Column("with_food", sa.Boolean, nullable=True),
+    sa.Column("created_at", sa.Text, nullable=False),
+)
+
+regimen_table = sa.Table(
+    "regimen",
+    sa.MetaData(),
+    sa.Column("id", sa.Uuid(), primary_key=True, default=uuid.uuid7),
+    # No sa.ForeignKey here: subjects_table lives in a different MetaData,
+    # and the constraint itself is the database's job (migration 002
+    # created it). This copy is for querying and writing.
+    sa.Column("subject_id", sa.Uuid(), nullable=False),
+    sa.Column("medication_id", sa.Uuid(), nullable=False),
+    sa.Column("config_subentry_id", sa.Text, nullable=True),
+    sa.Column("dose_units", sa.Float, nullable=False),
+    sa.Column("unit_strength", sa.Float, nullable=False),
+    sa.Column("frequency", sa.Text, nullable=True),
+    sa.Column("scheduled_times", sa.JSON, nullable=True),
+    sa.Column("prn", sa.Boolean, nullable=False),
+    sa.Column("min_interval_seconds", sa.Integer, nullable=True),
+    sa.Column("dose_variable", sa.Boolean, nullable=False),
+    sa.Column("dose_increment", sa.Float, nullable=True),
+    sa.Column("dose_max_single", sa.Float, nullable=True),
+    sa.Column("dose_max_daily", sa.Float, nullable=True),
+    sa.Column("indication", sa.Text, nullable=True),
+    sa.Column("prescribing_vet", sa.Text, nullable=True),
+    sa.Column("start_date", sa.Date, nullable=False),
+    sa.Column("end_date", sa.Date, nullable=True),
+    sa.Column("supersedes_id", sa.Uuid(), nullable=True),
+    sa.Column("created_at", sa.Text, nullable=False),
+)
+
+
 class SchemaTooNewError(RuntimeError):
     """The database's schema version is newer than this code understands.
 
@@ -127,13 +176,8 @@ def _configure_sqlite_engine(engine: sa.engine.Engine) -> None:
 def _should_back_up_before_migrating(current_version: int, target_version: int) -> bool:
     """True for an existing, non-fresh database about to be migrated.
 
-    Not reachable through connect_and_migrate() in practice yet: with only
-    migration 001, SCHEMA_VERSION is 1, so current_version is always either 0
-    (fresh install, nothing to lose) or already == target_version (nothing
-    to migrate) -- this starts actually triggering the moment migration 002
-    ships. Kept as its own function so the boundary conditions are testable
-    now, with synthetic version numbers, rather than waiting for a second
-    migration to exist to test it for real.
+    A fresh install (0) has nothing to lose, and an up-to-date database has
+    nothing about to change.
     """
     return 0 < current_version < target_version
 

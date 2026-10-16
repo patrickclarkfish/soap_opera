@@ -5,6 +5,13 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+
+- Migration 002: `medication` and `regimen` tables. Regimens are versioned
+  (a dosing change end-dates the current row and inserts a successor) and
+  effective-dated, with at most one in force per animal and medication.
+  Schema and storage helpers only; nothing user-facing yet.
+
 ### Fixed
 
 - The pre-migration backup is now taken with `VACUUM INTO` to
