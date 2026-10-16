@@ -54,6 +54,10 @@ flow, or integration setup/teardown.
   duplicates), and an update listener reloads the entry on any edit so that
   sync actually happens on a rename, not just at next restart. Any future
   entity should read from the database, not from `entry.data`.
+  Regimen subentries follow the same rule (`regimen_config.py`): subentry
+  flows only *read* the database, and every add, edit, or removal reaches
+  it through the sync that setup runs after the update listener reloads.
+  Removing a subentry end-dates its regimen and never deletes it.
 
 - **A migration module's own Table objects are frozen snapshots, not the
   current shape.** Never import one migration's Table definition into
@@ -89,3 +93,8 @@ flow, or integration setup/teardown.
   SQLite can't constrain non-overlapping ranges, so `insert_regimen` checks
   it inside the write transaction (safe because of `BEGIN IMMEDIATE`). Every
   regimen insert goes through it.
+
+- **Which regimen fields are dosing is a deliberate list**
+  (`regimens.DOSING_FIELDS` / `NON_DOSING_FIELDS`). A dosing edit supersedes
+  at an effective date; a non-dosing edit corrects the current row in place.
+  A new regimen column must be added to exactly one of them.

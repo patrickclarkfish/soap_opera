@@ -96,7 +96,7 @@ reason it exists as a separate integration rather than a fork or a PR:
 - **Phase 1 — in progress.** The data model and the dose-logging funnel.
   - [x] Pre-migration backup and audit log durability fixes.
   - [x] Medications and versioned, effective-dated regimens (migration 002).
-  - [ ] Regimens as config subentries of an animal.
+  - [x] Regimens as config subentries of an animal.
   - [ ] The `log_dose` service: one funnel for every capture path, with
         database-enforced idempotency and warn-and-record guardrails, plus a
         log-dose button and an administration event entity per regimen.
