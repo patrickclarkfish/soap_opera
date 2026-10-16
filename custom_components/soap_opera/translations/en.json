@@ -217,7 +217,7 @@
         },
         "path": {
           "name": "Path",
-          "description": "New directory, relative to the config directory. Defaults to soap_opera_exports/<timestamp>."
+          "description": "New directory, relative to the config directory. Defaults to a timestamped directory under soap_opera_exports."
         }
       }
     }
