@@ -40,3 +40,18 @@ log_dose:
       default: false
       selector:
         boolean:
+
+export:
+  fields:
+    format:
+      default: json
+      selector:
+        select:
+          translation_key: export_format
+          options:
+            - json
+            - csv
+    path:
+      example: "soap_opera_exports/before-upgrade"
+      selector:
+        text:

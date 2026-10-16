@@ -27,6 +27,10 @@ All notable changes to this project are documented here. Format follows
   outcomes. Every dose is written to the audit log and fires
   `soap_opera_dose_logged`.
 - Per regimen: a "log dose" button and an "administration" event entity.
+- `soap_opera.export` service (admin only). Writes every table, as JSON or
+  as one CSV per table, to a new directory inside the config directory,
+  with a manifest recording the schema version. It reads one consistent
+  snapshot, writes atomically, and never overwrites.
 
 ### Fixed
 

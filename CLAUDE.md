@@ -124,3 +124,10 @@ flow, or integration setup/teardown.
 
 - **`capture_event` is telemetry, not the record.** Like the JSONL log it is
   bounded (retention arrives later). `administration` is the record.
+
+- **Export covers every table, always.** `storage/export.EXPORT_TABLES`
+  must list every table the migrations create (a test enforces it), so a
+  migration adding a table adds it there in the same change. Export is the
+  disaster recovery and the owner's right to their animal's history; it
+  never overwrites, and it writes atomically with the schema version in its
+  manifest.

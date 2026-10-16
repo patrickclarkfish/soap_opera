@@ -135,6 +135,12 @@
         "held_per_vet": "Held per vet",
         "skipped_other": "Skipped (other)"
       }
+    },
+    "export_format": {
+      "options": {
+        "json": "JSON (one file)",
+        "csv": "CSV (one file per table)"
+      }
     }
   },
   "entity": {
@@ -198,6 +204,20 @@
         "override_guardrails": {
           "name": "Override guardrails",
           "description": "Acknowledge any tripped guardrail, e.g. an extra dose the vet approved. The override is recorded with the dose."
+        }
+      }
+    },
+    "export": {
+      "name": "Export",
+      "description": "Writes every table of the SOAP Opera database to a new directory inside the Home Assistant config directory, with a manifest recording the schema version. Never overwrites.",
+      "fields": {
+        "format": {
+          "name": "Format",
+          "description": "JSON writes one tables.json. CSV writes one file per table."
+        },
+        "path": {
+          "name": "Path",
+          "description": "New directory, relative to the config directory. Defaults to a timestamped directory under soap_opera_exports."
         }
       }
     }
