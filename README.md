@@ -97,7 +97,7 @@ reason it exists as a separate integration rather than a fork or a PR:
   - [x] Pre-migration backup and audit log durability fixes.
   - [x] Medications and versioned, effective-dated regimens (migration 002).
   - [x] Regimens as config subentries of an animal.
-  - [ ] The `log_dose` service: one funnel for every capture path, with
+  - [x] The `log_dose` service: one funnel for every capture path, with
         database-enforced idempotency and warn-and-record guardrails, plus a
         log-dose button and an administration event entity per regimen.
   - [ ] The `export` service: every table to CSV or JSON.

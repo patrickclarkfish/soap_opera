@@ -582,3 +582,22 @@ def end_regimens_for_removed_subentries(
             end_regimen(conn, row.id, today)
             ended.append(row.id)
     return ended
+
+
+def regimen_in_force_for_subentry(
+    conn: Connection, config_subentry_id: str, on: date
+) -> Row[Any] | None:
+    """The version of a subentry's regimen in force on `on`.
+
+    The subentry id is the stable handle for a regimen across supersedes;
+    a row id is one version. Resolving by date means a dose backfilled to
+    last week lands on last week's dose, not today's.
+    """
+    r = regimen_table.c
+    return conn.execute(
+        sa.select(regimen_table).where(
+            r.config_subentry_id == config_subentry_id,
+            r.start_date <= on,
+            sa.or_(r.end_date.is_(None), r.end_date > on),
+        )
+    ).first()

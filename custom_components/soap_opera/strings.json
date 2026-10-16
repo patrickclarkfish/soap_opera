@@ -126,6 +126,80 @@
       "options": {
         "new": "Define a new medication"
       }
+    },
+    "caller_status": {
+      "options": {
+        "given": "Given",
+        "refused": "Refused",
+        "vomited_within_30min": "Vomited within 30 minutes",
+        "held_per_vet": "Held per vet",
+        "skipped_other": "Skipped (other)"
+      }
+    }
+  },
+  "entity": {
+    "button": {
+      "log_dose": {
+        "name": "{medication} log dose"
+      }
+    },
+    "event": {
+      "administration": {
+        "name": "{medication} administration",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "given": "Given",
+              "given_late": "Given late",
+              "refused": "Refused",
+              "vomited_within_30min": "Vomited within 30 minutes",
+              "held_per_vet": "Held per vet",
+              "skipped_other": "Skipped (other)",
+              "missed": "Missed"
+            }
+          }
+        }
+      }
+    }
+  },
+  "services": {
+    "log_dose": {
+      "name": "Log dose",
+      "description": "Records one administration of a regimen. Guardrails (minimum interval, single-dose ceiling, 24-hour total) never block: tripped guardrails are recorded with the dose and returned in the response.",
+      "fields": {
+        "regimen": {
+          "name": "Regimen",
+          "description": "The regimen's log-dose button or administration event entity, or its config subentry ID."
+        },
+        "dose_units": {
+          "name": "Dose units",
+          "description": "How many tablets, capsules, mL or patches. Defaults to the regimen's standard dose."
+        },
+        "status": {
+          "name": "Status",
+          "description": "What happened. Given late and missed are computed from the schedule and can't be logged."
+        },
+        "administered_at": {
+          "name": "Administered at",
+          "description": "When the dose was given. Defaults to now."
+        },
+        "administered_by": {
+          "name": "Administered by",
+          "description": "Who gave it. Defaults to the user making the call."
+        },
+        "note": {
+          "name": "Note",
+          "description": "Free-text note stored with the dose."
+        },
+        "idempotency_key": {
+          "name": "Idempotency key",
+          "description": "Calls with the same key record one dose. Generated when absent, from the regimen, the person, and a two-minute time bucket."
+        },
+        "override_guardrails": {
+          "name": "Override guardrails",
+          "description": "Acknowledge any tripped guardrail, e.g. an extra dose the vet approved. The override is recorded with the dose."
+        }
+      }
     }
   }
 }

@@ -1,0 +1,19 @@
+{
+  "entity": {
+    "button": {
+      "log_dose": {
+        "default": "mdi:pill"
+      }
+    },
+    "event": {
+      "administration": {
+        "default": "mdi:clipboard-text-clock"
+      }
+    }
+  },
+  "services": {
+    "log_dose": {
+      "service": "mdi:pill"
+    }
+  }
+}

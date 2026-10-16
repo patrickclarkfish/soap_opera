@@ -13,11 +13,12 @@ from collections.abc import Callable
 
 from sqlalchemy.engine import Connection
 
-from . import m001_initial, m002_medication_regimen
+from . import m001_initial, m002_medication_regimen, m003_administration
 
 MIGRATIONS: dict[int, Callable[[Connection], None]] = {
     1: m001_initial.apply,
     2: m002_medication_regimen.apply,
+    3: m003_administration.apply,
 }
 
 SCHEMA_VERSION = max(MIGRATIONS)

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 import sqlalchemy as sa
@@ -26,6 +26,25 @@ from custom_components.soap_opera.storage.migrations import SCHEMA_VERSION
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryError
 from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+
+@pytest.fixture(autouse=True)
+def _no_platform_forwarding(hass: HomeAssistant):
+    """These tests call async_setup_entry / async_unload_entry directly,
+    outside the config entry lifecycle, to exercise the shared-database
+    bookkeeping. HA only allows forwarding platforms for an entry it is
+    itself setting up, so platform setup is stubbed out here; the
+    platforms are covered in test_log_dose.py through the real lifecycle.
+    """
+    with (
+        patch.object(hass.config_entries, "async_forward_entry_setups", AsyncMock()),
+        patch.object(
+            hass.config_entries,
+            "async_unload_platforms",
+            AsyncMock(return_value=True),
+        ),
+    ):
+        yield
 
 
 async def test_concurrent_setup_creates_exactly_one_database(

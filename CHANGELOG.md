@@ -16,6 +16,17 @@ All notable changes to this project are documented here. Format follows
   an effective date (default today). Editing the indication or prescribing
   vet corrects the current version. Removing a regimen end-dates it and
   keeps its history.
+- Migration 003: `administration`, the record of each dose (counted units,
+  strength per unit, and canonical amount), and `capture_event`, the
+  capture telemetry behind idempotency.
+- `soap_opera.log_dose` service: the one funnel for recording a dose.
+  Attribution comes from the calling user automatically. Idempotency is
+  enforced by the database. Guardrails (minimum interval, single-dose
+  ceiling, rolling 24-hour total) warn and record but never block, and an
+  override is recorded. It returns the administration id and the guardrail
+  outcomes. Every dose is written to the audit log and fires
+  `soap_opera_dose_logged`.
+- Per regimen: a "log dose" button and an "administration" event entity.
 
 ### Fixed
 

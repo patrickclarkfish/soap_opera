@@ -7,9 +7,11 @@ migrations are added.
 
 from __future__ import annotations
 
+from datetime import date
+
 import pytest
 import sqlalchemy as sa
-from custom_components.soap_opera.storage import database
+from custom_components.soap_opera.storage import database, regimens
 from custom_components.soap_opera.storage.migrations import MIGRATIONS, SCHEMA_VERSION
 
 
@@ -135,13 +137,18 @@ def test_migration_ddl_does_not_survive_a_rolled_back_transaction() -> None:
 
 @pytest.mark.parametrize(
     "table",
-    [database.medication_table, database.regimen_table],
+    [
+        database.medication_table,
+        database.regimen_table,
+        database.administration_table,
+        database.capture_event_table,
+    ],
     ids=lambda table: table.name,
 )
 def test_current_table_matches_what_the_migrations_create(table: sa.Table) -> None:
     """Same enforcement as the subjects test above, for the tables added by
-    migration 002: database.py's current-shape copy must match the schema
-    the migration chain actually produces.
+    migrations 002 and 003: database.py's current-shape copy must match the
+    schema the migration chain actually produces.
     """
     engine = _engine()
     database.run_migrations(engine)
@@ -169,16 +176,21 @@ def _versions(engine: sa.engine.Engine) -> list[int]:
         )
 
 
-def test_fresh_install_walks_every_step_from_zero_to_two() -> None:
+def test_fresh_install_walks_every_step_from_zero() -> None:
     engine = _engine()
 
     database.run_migrations(engine)
 
-    # One version row per step, in order: the loop ran 1 then 2, rather
-    # than jumping straight to the end.
-    assert _versions(engine)[:2] == [1, 2]
+    # One version row per step, in order, rather than jumping to the end.
+    assert _versions(engine) == list(range(1, SCHEMA_VERSION + 1))
     tables = set(sa.inspect(engine).get_table_names())
-    assert {"subjects", "medication", "regimen"} <= tables
+    assert {
+        "subjects",
+        "medication",
+        "regimen",
+        "administration",
+        "capture_event",
+    } <= tables
 
 
 def test_upgrade_from_one_to_two_keeps_existing_data(
@@ -202,7 +214,7 @@ def test_upgrade_from_one_to_two_keeps_existing_data(
 
     database.run_migrations(engine)
 
-    assert _versions(engine)[:2] == [1, 2]
+    assert _versions(engine) == list(range(1, SCHEMA_VERSION + 1))
     assert "regimen" in sa.inspect(engine).get_table_names()
     with engine.connect() as conn:
         names = conn.execute(sa.select(database.subjects_table.c.name)).scalars()
@@ -222,3 +234,63 @@ def test_migration_002_foreign_keys_point_where_they_should() -> None:
         "medication_id": "medication",
         "supersedes_id": "regimen",
     }
+
+
+def test_upgrade_from_two_to_three_keeps_existing_regimens(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = _engine()
+    monkeypatch.setattr(database, "MIGRATIONS", {v: MIGRATIONS[v] for v in (1, 2)})
+    monkeypatch.setattr(database, "SCHEMA_VERSION", 2)
+    database.run_migrations(engine)
+    subject_id = database.upsert_subject(
+        engine,
+        config_entry_id="entry-1",
+        name="Biscuit",
+        species="Dog",
+        breed=None,
+        date_of_birth=None,
+    )
+    with engine.begin() as conn:
+        medication_id = regimens.insert_medication(
+            conn, generic_name="x", strength=1, unit="mg", form="tablet", route="oral"
+        )
+        regimen_id = regimens.insert_regimen(
+            conn,
+            subject_id=subject_id,
+            medication_id=medication_id,
+            start_date=date(2026, 1, 1),
+            dose_units=1,
+            unit_strength=1,
+        )
+    assert "administration" not in sa.inspect(engine).get_table_names()
+    monkeypatch.undo()
+
+    database.run_migrations(engine)
+
+    assert _versions(engine) == [1, 2, 3]
+    with engine.connect() as conn:
+        assert regimens.get_regimen(conn, regimen_id) is not None
+
+
+def test_migration_003_constraints() -> None:
+    engine = _engine()
+    database.run_migrations(engine)
+    inspector = sa.inspect(engine)
+
+    fks = {
+        fk["constrained_columns"][0]: fk["referred_table"]
+        for fk in inspector.get_foreign_keys("administration")
+    }
+    assert fks == {"regimen_id": "regimen", "amends_id": "administration"}
+    unique = [
+        constraint["column_names"]
+        for constraint in inspector.get_unique_constraints("capture_event")
+    ] + [
+        index["column_names"]
+        for index in inspector.get_indexes("capture_event")
+        if index["unique"]
+    ]
+    assert ["idempotency_key"] in unique
+    checks = [c["sqltext"] for c in inspector.get_check_constraints("administration")]
+    assert any("given_late" in text for text in checks)

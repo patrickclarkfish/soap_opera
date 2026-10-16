@@ -98,6 +98,43 @@ regimen_table = sa.Table(
 )
 
 
+# Current cumulative shapes of `administration` and `capture_event`, separate
+# from migration 003's frozen snapshot. Column meanings, and the status
+# CHECK constraint, are documented in m003_administration.py.
+administration_table = sa.Table(
+    "administration",
+    sa.MetaData(),
+    sa.Column("id", sa.Uuid(), primary_key=True, default=uuid.uuid7),
+    sa.Column("regimen_id", sa.Uuid(), nullable=False),
+    sa.Column("scheduled_for", sa.Text, nullable=True),
+    sa.Column("administered_at", sa.Text, nullable=False),
+    sa.Column("dose_units", sa.Float, nullable=False),
+    sa.Column("unit_strength", sa.Float, nullable=False),
+    sa.Column("dose_mg", sa.Float, nullable=False),
+    sa.Column("status", sa.Text, nullable=False),
+    sa.Column("administered_by", sa.Text, nullable=True),
+    sa.Column("capture_method", sa.Text, nullable=False),
+    sa.Column("note", sa.Text, nullable=True),
+    sa.Column("source_event_count", sa.Integer, nullable=False),
+    sa.Column("guardrail_flags", sa.JSON, nullable=True),
+    sa.Column("amends_id", sa.Uuid(), nullable=True),
+    sa.Column("created_at", sa.Text, nullable=False),
+)
+
+capture_event_table = sa.Table(
+    "capture_event",
+    sa.MetaData(),
+    sa.Column("id", sa.Uuid(), primary_key=True, default=uuid.uuid7),
+    sa.Column("idempotency_key", sa.Text, nullable=True),
+    sa.Column("source", sa.Text, nullable=False),
+    sa.Column("source_ref", sa.Text, nullable=True),
+    sa.Column("received_at", sa.Text, nullable=False),
+    sa.Column("payload", sa.JSON, nullable=False),
+    sa.Column("collapsed_into_administration_id", sa.Uuid(), nullable=True),
+    sa.Column("was_duplicate", sa.Boolean, nullable=False),
+)
+
+
 class SchemaTooNewError(RuntimeError):
     """The database's schema version is newer than this code understands.
 
