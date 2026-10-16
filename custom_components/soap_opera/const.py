@@ -15,6 +15,7 @@ CONF_DATE_OF_BIRTH = "date_of_birth"
 IDEMPOTENCY_BUCKET_SECONDS = 120
 
 SERVICE_LOG_DOSE = "log_dose"
+SERVICE_EXPORT = "export"
 
 # Fired on the bus for every newly recorded administration (not for
 # duplicates that collapsed into an existing one).
