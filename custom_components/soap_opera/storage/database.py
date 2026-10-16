@@ -11,7 +11,7 @@ committed immediately so a crash mid-chain resumes where it left off.
 from __future__ import annotations
 
 import logging
-import shutil
+import os
 import uuid
 from datetime import UTC, datetime
 
@@ -28,6 +28,8 @@ from .tables import schema_version_table
 _LOGGER = logging.getLogger(__name__)
 
 DB_FILENAME = "soap_opera.db"
+# Both live in the HA config directory, resolved via hass.config.path().
+AUDIT_LOG_FILENAME = "soap_opera_audit.jsonl"
 
 # The current cumulative shape of `subjects`, for querying and writing --
 # deliberately a *separate* definition from what migration 001 creates (see
@@ -136,6 +138,57 @@ def _should_back_up_before_migrating(current_version: int, target_version: int) 
     return 0 < current_version < target_version
 
 
+def _back_up_database(
+    engine: sa.engine.Engine, db_path: str, current_version: int
+) -> None:
+    """Snapshot the database to <db_path>.v<current_version>.backup. Blocking.
+
+    VACUUM INTO, not checkpoint-then-copy: it reads through SQLite itself,
+    so the snapshot includes whatever is still only in the -wal sidecar, is
+    written atomically, and raises on any failure rather than producing a
+    silently incomplete copy.
+
+    Never overwrites. An existing backup for this same source version can
+    only have come from an earlier attempt at this same migration -- one
+    that failed, so the live database may now be partially migrated or
+    otherwise damaged, and the earlier backup is the trustworthy one. Keep
+    it and go ahead with the migration. (VACUUM INTO also refuses an
+    existing destination itself, so a backup appearing between this check
+    and the VACUUM still can't be clobbered; it would fail setup loudly
+    instead.)
+    """
+    backup_path = f"{db_path}.v{current_version}.backup"
+    if os.path.exists(backup_path):
+        _LOGGER.warning(
+            "A backup from an earlier attempt to migrate the soap_opera "
+            "database from schema version %s already exists at %s; keeping "
+            "it rather than replacing it with a copy of the current database",
+            current_version,
+            backup_path,
+        )
+        return
+
+    # Straight on the DBAPI connection: VACUUM cannot run inside a
+    # transaction, and any SQLAlchemy-level execute would first fire
+    # _sqlite_begin_explicit's BEGIN IMMEDIATE. The connect listener has
+    # already put pysqlite in autocommit (isolation_level=None), so this
+    # runs outside one.
+    raw = engine.raw_connection()
+    try:
+        cursor = raw.cursor()
+        try:
+            cursor.execute("VACUUM INTO ?", (backup_path,))
+        finally:
+            cursor.close()
+    finally:
+        raw.close()
+    _LOGGER.info(
+        "Backed up soap_opera database to %s before migrating from version %s",
+        backup_path,
+        current_version,
+    )
+
+
 def _get_current_version(engine: sa.engine.Engine) -> int:
     """Return the schema version recorded in the database, or 0 if unset."""
     inspector = sa.inspect(engine)
@@ -242,29 +295,24 @@ class Database:
     def connect_and_migrate(self) -> None:
         """Open the engine, back up a non-fresh database before migrating it,
         and run any pending migrations. Blocking.
+
+        On any failure the engine is disposed and self.engine stays unset.
         """
         db_path = self._hass.config.path(DB_FILENAME)
         engine = sa.create_engine(f"sqlite:///{db_path}", future=True)
         _configure_sqlite_engine(engine)
 
-        current = _get_current_version(engine)
-        if _should_back_up_before_migrating(current, SCHEMA_VERSION):
-            # WAL mode (enabled above) can leave recently-committed data
-            # sitting in the -wal sidecar file rather than in the main file.
-            # Checkpoint it into the main file first so a plain copy of that
-            # one file is a complete, self-consistent snapshot -- otherwise
-            # the backup can silently miss recent writes.
-            with engine.connect() as conn:
-                conn.exec_driver_sql("PRAGMA wal_checkpoint(TRUNCATE)")
-            backup_path = f"{db_path}.backup"
-            shutil.copy2(db_path, backup_path)
-            _LOGGER.info(
-                "Backed up soap_opera database to %s before migrating from version %s",
-                backup_path,
-                current,
-            )
-
-        run_migrations(engine)
+        try:
+            current = _get_current_version(engine)
+            if _should_back_up_before_migrating(current, SCHEMA_VERSION):
+                _back_up_database(engine, db_path, current)
+            run_migrations(engine)
+        except BaseException:
+            # Nothing else holds a reference to this engine yet, so if it
+            # isn't disposed here its pooled connections (and their file
+            # handles and WAL locks) leak for the life of the process.
+            engine.dispose()
+            raise
         self._engine = engine
 
     def upsert_subject(

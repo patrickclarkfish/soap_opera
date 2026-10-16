@@ -5,6 +5,7 @@ single-flight guard and the refcount bookkeeping around it.
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -16,7 +17,11 @@ from custom_components.soap_opera import (
 )
 from custom_components.soap_opera.const import CONF_SPECIES, DOMAIN
 from custom_components.soap_opera.storage import database
-from custom_components.soap_opera.storage.database import DB_FILENAME, Database
+from custom_components.soap_opera.storage.database import (
+    AUDIT_LOG_FILENAME,
+    DB_FILENAME,
+    Database,
+)
 from custom_components.soap_opera.storage.migrations import SCHEMA_VERSION
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryError
@@ -182,3 +187,25 @@ async def test_concurrent_unload_and_setup_of_different_entries_do_not_race(
     # Doesn't raise: proves this is a live engine, not one entry1's unload
     # closed out from under entry2's setup.
     assert shared.database.engine is not None
+
+
+async def test_one_audit_log_shared_by_every_entry(hass: HomeAssistant) -> None:
+    """The AuditLog's lock only serializes writers if every entry writes
+    through the same instance, so it lives beside the shared database.
+    """
+    entry1 = MockConfigEntry(
+        domain=DOMAIN, title="Biscuit", data={"name": "Biscuit", CONF_SPECIES: "Dog"}
+    )
+    entry2 = MockConfigEntry(
+        domain=DOMAIN, title="Waffles", data={"name": "Waffles", CONF_SPECIES: "Cat"}
+    )
+    entry1.add_to_hass(hass)
+    entry2.add_to_hass(hass)
+
+    assert await async_setup_entry(hass, entry1)
+    shared: SoapOperaData = hass.data[DOMAIN]["shared"]
+    audit_log = shared.audit_log
+    assert await async_setup_entry(hass, entry2)
+
+    assert hass.data[DOMAIN]["shared"].audit_log is audit_log
+    assert audit_log.path == Path(hass.config.path(AUDIT_LOG_FILENAME))

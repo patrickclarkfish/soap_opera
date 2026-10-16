@@ -16,6 +16,12 @@ flow, or integration setup/teardown.
   rotated. Keep that asymmetry — the database is the record of truth, the
   log is not.
 
+- **Exactly one `AuditLog` per integration instance.** It lives on
+  `SoapOperaData` beside the shared `Database` and is never constructed
+  anywhere else. Its `threading.Lock` serializes rotation and writes only
+  among callers sharing that instance; a second instance on the same file
+  would race the first's rotation and silently lose or interleave events.
+
 - **Zero add-ons required.** The integration must work fully on a stock HAOS
   install. Any external database (Postgres mirror) is optional, never
   required for core functionality.

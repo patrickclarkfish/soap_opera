@@ -10,18 +10,21 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
+from pathlib import Path
 
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryError
 from homeassistant.helpers import device_registry as dr
 
 from .const import CONF_BREED, CONF_DATE_OF_BIRTH, CONF_SPECIES, DOMAIN
-from .storage.database import Database, SchemaTooNewError
+from .storage.audit_log import AuditLog
+from .storage.database import AUDIT_LOG_FILENAME, Database, SchemaTooNewError
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[str] = []
+PLATFORMS: list[Platform] = []
 
 
 @dataclass
@@ -29,6 +32,9 @@ class SoapOperaData:
     """Runtime data shared by every soap_opera config entry, on hass.data[DOMAIN]."""
 
     database: Database
+    # Exactly one per integration instance, created alongside the database:
+    # AuditLog's lock only serializes writers that share the same instance.
+    audit_log: AuditLog
     entry_count: int
 
 
@@ -53,7 +59,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 await hass.async_add_executor_job(database.connect_and_migrate)
             except SchemaTooNewError as err:
                 raise ConfigEntryError(str(err)) from err
-            shared = SoapOperaData(database=database, entry_count=0)
+            shared = SoapOperaData(
+                database=database,
+                audit_log=AuditLog(Path(hass.config.path(AUDIT_LOG_FILENAME))),
+                entry_count=0,
+            )
             domain_data["shared"] = shared
             created_database_now = True
 

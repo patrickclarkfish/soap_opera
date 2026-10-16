@@ -27,12 +27,16 @@ def apply(conn: Connection) -> None:
     sa.Table(
         "subjects",
         metadata,
-        # UUIDv7 (time-ordered, so inserts still append rather than
-        # fragmenting SQLite's B-tree the way random UUIDv4 keys would) is
-        # the convention for every domain record's primary key from here on,
-        # not just this table. It also means the id an animal gets in this
-        # SQLite database is the same id it gets in the (future) Postgres
-        # mirror, with no remapping step when the mirror is rebuilt.
+        # UUIDv7 is the convention for every domain record's primary key
+        # from here on, not just this table. Mainly because the id an animal
+        # gets in this SQLite database is the same id it gets in the
+        # (future) Postgres mirror, with no remapping step when the mirror
+        # is rebuilt. Being time-ordered also helps, but less than it might
+        # look: a non-INTEGER primary key does not order a SQLite table --
+        # the table stays a rowid B-tree, and `id` gets a separate unique
+        # index. It is that index whose inserts append rather than fragment
+        # the way random UUIDv4 keys would. (Not a reason to reach for
+        # WITHOUT ROWID: the table's own B-tree is already append-only.)
         sa.Column("id", sa.Uuid(), primary_key=True, default=uuid.uuid7),
         sa.Column("config_entry_id", sa.Text, nullable=False, unique=True),
         sa.Column("name", sa.Text, nullable=False),

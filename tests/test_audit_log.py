@@ -7,9 +7,12 @@ the expected usage, not an edge case.
 from __future__ import annotations
 
 import json
+import logging
 import threading
 from pathlib import Path
+from unittest.mock import patch
 
+import pytest
 from custom_components.soap_opera.storage.audit_log import AuditLog
 
 
@@ -79,3 +82,33 @@ def test_concurrent_capture_event_does_not_raise_or_lose_events(
         lines = candidate.read_text().splitlines()
         assert len(lines) == 1
         json.loads(lines[0])  # well-formed, not truncated or concatenated
+
+
+def test_capture_event_flushes_and_fsyncs_each_write(tmp_path: Path) -> None:
+    """The log exists to survive exactly the power-loss case, so a write must
+    reach the disk before capture_event returns, not sit in a buffer.
+    """
+    log = AuditLog(tmp_path / "audit.jsonl")
+
+    with patch("custom_components.soap_opera.storage.audit_log.os.fsync") as fsync:
+        log.capture_event("dose_given", {})
+
+    fsync.assert_called_once()
+    (fd,) = fsync.call_args.args
+    assert isinstance(fd, int)
+
+
+def test_write_failure_is_logged_not_raised(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    # A directory where the file should be: open(..., "a") fails.
+    path = tmp_path / "audit.jsonl"
+    path.mkdir()
+    log = AuditLog(path)
+
+    log.capture_event("dose_given", {"animal": "Biscuit"})
+
+    assert any(
+        record.levelno == logging.WARNING and "dose_given" in record.getMessage()
+        for record in caplog.records
+    )
