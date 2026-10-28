@@ -100,7 +100,7 @@ jobs:
       # home-assistant/actions publishes no version tags; pinned to the
       # master HEAD commit as of 2026-09-10 ("Require string versions in
       # the info helper (#148)").
-      - uses: home-assistant/actions/hassfest@50baf3a307f87100cf550d4ae127746595030d5d
+      - uses: home-assistant/actions/hassfest@86d4564712fa02543c808e3a693dd04f9d3f8361
         # master @ 2026-09-10
 
   hacs:
